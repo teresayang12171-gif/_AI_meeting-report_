@@ -18,6 +18,19 @@ const upload = multer({
   }
 });
 
+function isUnavailableError(error: any): boolean {
+  if (!error) return false;
+  const message = String(error.message || '').toUpperCase();
+  const status = error.status || error.code || '';
+  return (
+    status === 503 ||
+    status === 'UNAVAILABLE' ||
+    message.includes('503') ||
+    message.includes('UNAVAILABLE') ||
+    message.includes('EXPERIENCING HIGH DEMAND')
+  );
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -60,7 +73,7 @@ async function startServer() {
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_INSTRUCTIONS,
@@ -71,6 +84,9 @@ async function startServer() {
       res.json({ text: response.text });
     } catch (error: any) {
       console.error('Gemini API Error:', error);
+      if (isUnavailableError(error)) {
+        return res.status(503).json({ error: '伺服器正忙，請等一下再試。' });
+      }
       res.status(500).json({ error: error.message || 'Internal Server Error' });
     }
   });
@@ -104,6 +120,9 @@ async function startServer() {
       res.json({ text: response.text });
     } catch (error: any) {
       console.error('Transcription Error:', error);
+      if (isUnavailableError(error)) {
+        return res.status(503).json({ error: '伺服器正忙，請等一下再試。' });
+      }
       res.status(500).json({ error: error.message || '語音轉錄失敗，請確認檔案格式是否正確。' });
     }
   });
